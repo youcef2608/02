@@ -1,0 +1,8 @@
+{
+  "name": "أثر | Athar",
+  "description": "تطبيق منصة أثر الرسمي لاكتشاف النداءات والمبادرات القريبة والتفاعل معها وتوثيق الأثر والدروس المستفادة والمساعد الذكي.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
