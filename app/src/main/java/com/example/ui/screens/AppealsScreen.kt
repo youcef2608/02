@@ -26,9 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.Appeal
 import com.example.data.repository.AtharRepository
 import com.example.ui.components.AppealCard
-import com.example.ui.theme.AtharAmberSecondary
-import com.example.ui.theme.AtharTealPrimary
-import com.example.ui.theme.AtharUrgentRed
+import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
