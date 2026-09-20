@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,7 +54,7 @@ fun AppealsScreen(
 
     val typeOptions = listOf("الكل", "ورشة", "تطوع", "تقنية", "تعليم", "موارد")
     val distanceOptions = listOf("الكل", "5 كم", "10 كم", "25 كم", "50 كم")
-    val priorityOptions = listOf("الكل", "عاجل 🔥", "عادي")
+    val priorityOptions = listOf("الكل", "عاجل", "عادي")
     val statusOptions = listOf("الكل", "يستقبل الردود", "نشط", "قيد التنفيذ")
 
     var showFiltersSheet by remember { mutableStateOf(false) }
@@ -66,7 +67,7 @@ fun AppealsScreen(
             prompt.contains("عاجل", ignoreCase = true) || prompt.contains("فوري", ignoreCase = true) -> {
                 aiAnswerText = "وجدت نداءين عاجلين بحاجة ماسة لمتطوعين: «برنامج دعم التحصيل الأكاديمي» (بقي مقعدين فقط) و«حملة تشجير المتنزه الطبيعي». أنصحك بالانضمام للتحصيل الأكاديمي فوراً!"
                 aiRecommendedAppealId = "appeal_4"
-                selectedPriorityFilter = "عاجل 🔥"
+                selectedPriorityFilter = "عاجل"
             }
             prompt.contains("قريب", ignoreCase = true) || prompt.contains("مسقط", ignoreCase = true) -> {
                 aiAnswerText = "أقرب نداء لك في مسقط هو «ورشة بناء وتطوير الروبوتات للناشئين» على بعد 3.4 كم فقط في مركز الابتكار العلمي بالقرم."
@@ -98,7 +99,7 @@ fun AppealsScreen(
             val matchType = selectedTypeFilter == "الكل" || appeal.type == selectedTypeFilter
             val remainingSpots = appeal.requiredParticipants - appeal.participantsCount
             val matchPriority = when (selectedPriorityFilter) {
-                "عاجل 🔥" -> appeal.priority == "عاجل" || appeal.priority == "مرتفع" || remainingSpots in 1..3
+                "عاجل" -> appeal.priority == "عاجل" || appeal.priority == "مرتفع" || remainingSpots in 1..3
                 "عادي" -> appeal.priority == "عادي" && remainingSpots > 3
                 else -> true
             }
@@ -227,6 +228,66 @@ fun AppealsScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Live Central Database Sync Banner
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = AtharTealPrimary.copy(alpha = 0.08f),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = Brush.horizontalGradient(listOf(AtharTealPrimary.copy(alpha = 0.4f), AtharTealLight.copy(alpha = 0.2f))),
+                        width = 1.dp
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981))
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "مربوط بالموقع وقاعدة البيانات المركزية",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = AtharTealPrimary
+                                )
+                                Text(
+                                    text = "النداءات والاستجابات تتزامن لحظياً بين الموقع والتطبيق",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                    AtharRepository.syncWithServer()
+                                }
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Sync,
+                                contentDescription = "مزامنة فورية",
+                                tint = AtharTealPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // 1. Ask AI Interactive Section ("اسأل من AI بعد الدخول")
             item {
                 Surface(
@@ -265,7 +326,7 @@ fun AppealsScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
-                                        text = "اسأل المساعد الذكي (AI) ✨🤖",
+                                        text = "اسأل المساعد الذكي (AI)",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 15.sp,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -284,7 +345,9 @@ fun AppealsScreen(
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("المساعد 💬", fontSize = 11.sp)
+                                Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("المساعد الذكي", fontSize = 11.sp)
                             }
                         }
 
@@ -338,13 +401,19 @@ fun AppealsScreen(
                                     color = AtharTealPrimary.copy(alpha = 0.1f),
                                     modifier = Modifier.clickable { handleAiAsk("أقرب نداء في مسقط") }
                                 ) {
-                                    Text(
-                                        text = "📍 أقرب نداء إليّ",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = AtharTealPrimary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.NearMe, contentDescription = null, tint = AtharTealPrimary, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "أقرب نداء إليّ",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AtharTealPrimary
+                                        )
+                                    }
                                 }
                             }
                             item {
@@ -353,13 +422,19 @@ fun AppealsScreen(
                                     color = AtharUrgentRed.copy(alpha = 0.12f),
                                     modifier = Modifier.clickable { handleAiAsk("نداءات عاجلة تحتاج متطوعين") }
                                 ) {
-                                    Text(
-                                        text = "🔥 نداءات عاجلة فوراً",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = AtharUrgentRed,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.PriorityHigh, contentDescription = null, tint = AtharUrgentRed, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "نداءات عاجلة",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AtharUrgentRed
+                                        )
+                                    }
                                 }
                             }
                             item {
@@ -368,13 +443,19 @@ fun AppealsScreen(
                                     color = AtharAmberSecondary.copy(alpha = 0.15f),
                                     modifier = Modifier.clickable { handleAiAsk("ورش التقنية والذكاء الاصطناعي") }
                                 ) {
-                                    Text(
-                                        text = "🤖 ورش التقنية والروبوت",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = AtharAmberSecondary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Memory, contentDescription = null, tint = AtharAmberSecondary, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "ورش التقنية والروبوت",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AtharAmberSecondary
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -399,7 +480,7 @@ fun AppealsScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("💡", fontSize = 14.sp)
+                                            Icon(Icons.Default.Lightbulb, contentDescription = null, tint = AtharAmberSecondary, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
                                                 text = "اقتراح الذكاء الاصطناعي المباشر:",
@@ -444,7 +525,9 @@ fun AppealsScreen(
                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                             modifier = Modifier.weight(1f)
                                         ) {
-                                            Text("استكشف على الخريطة 🗺️", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("استكشف على الخريطة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -482,7 +565,7 @@ fun AppealsScreen(
                                     color = Color(0x3310B981)
                                 ) {
                                     Text(
-                                        text = "رادار نشط 360° 📡",
+                                        text = "رادار نشط 360°",
                                         color = Color(0xFF10B981),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -491,7 +574,7 @@ fun AppealsScreen(
                                 }
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "خريطة أثر الأسطورية 🗺️⚡",
+                                    text = "خريطة أثر التفاعلية",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     color = Color.White
@@ -514,7 +597,9 @@ fun AppealsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = AtharTealPrimary),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                         ) {
-                            Text("فتح 🚀", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("استعراض الخريطة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -530,7 +615,7 @@ fun AppealsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "النداءات المتاحة (${filteredAppeals.size}) 📢",
+                        text = "النداءات المتاحة (${filteredAppeals.size})",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
@@ -598,7 +683,11 @@ fun AppealsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("فلاتر تصفية النداءات ⚙️", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.FilterList, contentDescription = null, tint = AtharTealPrimary, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("فلاتر تصفية النداءات", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
                     IconButton(onClick = { showFiltersSheet = false }) {
                         Icon(Icons.Default.Close, contentDescription = "إغلاق")
                     }

@@ -140,22 +140,31 @@ fun MapScreen(
     // AI Map Assistant modal state
     var showAiMapDialog by remember { mutableStateOf(false) }
 
-    // Quick Jump City Presets across Oman
+    // Geographic Projection Helper for National Algerian Territory
+    fun algeriaNormX(lng: Double): Float =
+        ((lng - (-8.7)) / (12.0 - (-8.7))).toFloat().coerceIn(0.04f, 0.96f)
+
+    fun algeriaNormY(lat: Double): Float =
+        (1.0 - (lat - 18.0) / (37.5 - 18.0)).toFloat().coerceIn(0.04f, 0.96f)
+
+    // Quick Jump Algerian Wilayas Presets
     val cities = listOf(
-        CityLocation("مسقط", 23.5930, 58.4010, 1.8f),
-        CityLocation("بوشر", 23.5500, 58.3900, 2.2f),
-        CityLocation("السيب", 23.6700, 58.1800, 2.0f),
-        CityLocation("مطرح", 23.6120, 58.5500, 2.1f),
-        CityLocation("نزوى", 22.9333, 57.5333, 1.7f),
-        CityLocation("صحار", 24.3461, 56.7075, 1.7f),
-        CityLocation("صلالة", 17.0151, 54.0924, 1.6f)
+        CityLocation("الجزائر العاصمة", 36.7538, 3.0588, 2.0f),
+        CityLocation("وهران", 35.6987, -0.6349, 1.9f),
+        CityLocation("قسنطينة", 36.3650, 6.6147, 1.9f),
+        CityLocation("سطيف", 36.1905, 5.4137, 1.8f),
+        CityLocation("عنابة", 36.9000, 7.7667, 1.8f),
+        CityLocation("البليدة", 36.4700, 2.8300, 2.0f),
+        CityLocation("تلمسان", 34.8783, -1.3150, 1.8f),
+        CityLocation("ورقلة", 31.9500, 5.3300, 1.6f),
+        CityLocation("أدرار", 27.8742, -0.2939, 1.5f)
     )
 
     // Reset center helper
     fun centerOnCity(city: CityLocation) {
         zoom = city.zoomLevel
-        val normX = ((city.lng - 54.0) / (59.5 - 54.0)).toFloat()
-        val normY = (1.0 - (city.lat - 16.5) / (25.5 - 16.5)).toFloat()
+        val normX = algeriaNormX(city.lng)
+        val normY = algeriaNormY(city.lat)
         panOffsetX = -(normX - 0.5f) * 600f * zoom
         panOffsetY = -(normY - 0.5f) * 600f * zoom
     }
@@ -187,8 +196,8 @@ fun MapScreen(
                         var minDistanceSq = 48f * 48f // 48px touch radius for accessibility
 
                         filteredAppeals.forEach { app ->
-                            val normX = ((app.longitude - 54.0) / (59.5 - 54.0)).toFloat()
-                            val normY = (1.0 - (app.latitude - 16.5) / (25.5 - 16.5)).toFloat()
+                            val normX = algeriaNormX(app.longitude)
+                            val normY = algeriaNormY(app.latitude)
                             val markerX = (normX * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f)
                             val markerY = (normY * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
 
@@ -239,33 +248,37 @@ fun MapScreen(
                     currentY += gridStep
                 }
 
-                // Oman Coastline Contour Curves
+                // Algeria Mediterranean Coastline Contour Curves
                 val coastPath = Path().apply {
                     val p1 = Offset(
-                        ((54.1f - 54.0f) / 5.5f * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
-                        ((1.0f - (17.0f - 16.5f) / 9.0f) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
+                        (algeriaNormX(-2.0) * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
+                        (algeriaNormY(35.1) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
                     )
                     val p2 = Offset(
-                        ((55.4f - 54.0f) / 5.5f * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
-                        ((1.0f - (20.5f - 16.5f) / 9.0f) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
+                        (algeriaNormX(-0.6) * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
+                        (algeriaNormY(35.7) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
                     )
                     val p3 = Offset(
-                        ((57.5f - 54.0f) / 5.5f * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
-                        ((1.0f - (22.9f - 16.5f) / 9.0f) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
+                        (algeriaNormX(1.3) * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
+                        (algeriaNormY(36.3) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
                     )
                     val p4 = Offset(
-                        ((58.5f - 54.0f) / 5.5f * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
-                        ((1.0f - (23.6f - 16.5f) / 9.0f) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
+                        (algeriaNormX(3.06) * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
+                        (algeriaNormY(36.75) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
                     )
                     val p5 = Offset(
-                        ((56.8f - 54.0f) / 5.5f * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
-                        ((1.0f - (24.4f - 16.5f) / 9.0f) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
+                        (algeriaNormX(5.1) * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
+                        (algeriaNormY(36.75) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
+                    )
+                    val p6 = Offset(
+                        (algeriaNormX(7.77) * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
+                        (algeriaNormY(36.9) * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
                     )
 
                     moveTo(p1.x, p1.y)
                     quadraticBezierTo(p2.x, p2.y, p3.x, p3.y)
-                    quadraticBezierTo((p3.x + p4.x) / 2, (p3.y + p4.y) / 2, p4.x, p4.y)
-                    quadraticBezierTo((p4.x + p5.x) / 2, (p4.y + p5.y) / 2, p5.x, p5.y)
+                    quadraticBezierTo(p4.x, p4.y, p5.x, p5.y)
+                    quadraticBezierTo((p5.x + p6.x) / 2, (p5.y + p6.y) / 2, p6.x, p6.y)
                 }
 
                 drawPath(
@@ -281,19 +294,18 @@ fun MapScreen(
                     style = Stroke(width = 12f * zoom.coerceIn(1f, 2.5f))
                 )
 
-                // Oman Major Cities Heat Zones / Activity Auras (Muscat, Sohar, Nizwa, Salalah, Seeb, Sur)
+                // Algeria Major Wilayas Heat Zones / Activity Auras (Algiers, Oran, Constantine, Setif, Annaba)
                 val heatHubs = listOf(
-                    Triple(23.5930, 58.4010, Color(0x282DD4BF)), // Muscat
-                    Triple(23.6700, 58.1800, Color(0x2210B981)), // Seeb
-                    Triple(24.3461, 56.7075, Color(0x1E38BDF8)), // Sohar
-                    Triple(22.9333, 57.5333, Color(0x1EF59E0B)), // Nizwa
-                    Triple(22.5667, 59.5289, Color(0x18818CF8)), // Sur
-                    Triple(17.0151, 54.0924, Color(0x2010B981))  // Salalah
+                    Triple(36.7538, 3.0588, Color(0x282DD4BF)), // Algiers
+                    Triple(35.6987, -0.6349, Color(0x2210B981)), // Oran
+                    Triple(36.3650, 6.6147, Color(0x1E38BDF8)), // Constantine
+                    Triple(36.1905, 5.4137, Color(0x1EF59E0B)), // Setif
+                    Triple(36.9000, 7.7667, Color(0x18818CF8))  // Annaba
                 )
 
                 heatHubs.forEach { (lat, lng, auraColor) ->
-                    val hubNormX = ((lng - 54.0) / (59.5 - 54.0)).toFloat()
-                    val hubNormY = (1.0 - (lat - 16.5) / (25.5 - 16.5)).toFloat()
+                    val hubNormX = algeriaNormX(lng)
+                    val hubNormY = algeriaNormY(lat)
                     val hubPos = Offset(
                         (hubNormX * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
                         (hubNormY * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
@@ -302,9 +314,9 @@ fun MapScreen(
                     drawCircle(auraColor.copy(alpha = 0.5f), radius = 24f * zoom.coerceIn(0.8f, 2.0f), center = hubPos)
                 }
 
-                // User approximate location indicator (Green dot with soft pulse)
-                val userNormX = ((58.38f - 54.0f) / (59.5f - 54.0f))
-                val userNormY = (1.0f - (23.59f - 16.5f) / (25.5f - 16.5f))
+                // User approximate location indicator (Algiers Center: 36.7538, 3.0588)
+                val userNormX = algeriaNormX(3.0588)
+                val userNormY = algeriaNormY(36.7538)
                 val userPos = Offset(
                     (userNormX * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
                     (userNormY * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
@@ -360,8 +372,8 @@ fun MapScreen(
 
                 // Dynamic Navigation Trajectory Beam (If an appeal is selected)
                 if (selectedAppeal != null) {
-                    val selNormX = ((selectedAppeal.longitude - 54.0) / (59.5 - 54.0)).toFloat()
-                    val selNormY = (1.0 - (selectedAppeal.latitude - 16.5) / (25.5 - 16.5)).toFloat()
+                    val selNormX = algeriaNormX(selectedAppeal.longitude)
+                    val selNormY = algeriaNormY(selectedAppeal.latitude)
                     val targetPos = Offset(
                         (selNormX * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
                         (selNormY * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)
@@ -396,8 +408,8 @@ fun MapScreen(
                 filteredAppeals.forEach { app ->
                     val isSelected = app.id == selectedAppealId
                     val isAiRecommended = app.type == "تقنية" || app.type == "ورشة" || app.distanceKm <= 5.0 || app.priority == "عاجل"
-                    val normX = ((app.longitude - 54.0) / (59.5 - 54.0)).toFloat()
-                    val normY = (1.0 - (app.latitude - 16.5) / (25.5 - 16.5)).toFloat()
+                    val normX = algeriaNormX(app.longitude)
+                    val normY = algeriaNormY(app.latitude)
                     val markerPos = Offset(
                         (normX * w * zoom) + panOffsetX + (w * (1f - zoom) / 2f),
                         (normY * h * zoom) + panOffsetY + (h * (1f - zoom) / 2f)

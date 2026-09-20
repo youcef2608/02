@@ -9,6 +9,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.repository.AtharRepository
 import com.example.ui.theme.AtharAmberSecondary
 import com.example.ui.theme.AtharTealPrimary
 
@@ -32,6 +35,9 @@ fun AtharTopAppBar(
     onSettingsClick: () -> Unit = {},
     onAuthClick: () -> Unit = {}
 ) {
+    val userProfile by AtharRepository.userProfile.collectAsState()
+    val serverStatus by AtharRepository.serverSyncState.collectAsState()
+
     TopAppBar(
         title = {
             Row(
@@ -59,14 +65,23 @@ fun AtharTopAppBar(
                     Text(
                         text = title,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Text(
-                        text = "منظومة الأثر والمعرفة",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981))
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (userProfile.isLoggedIn) "${userProfile.name} • ${if (userProfile.role == "ASSOCIATION") "جمعية معتمدة" else "متطوع"}" else "متصل بالموقع والسيرفر",
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         },

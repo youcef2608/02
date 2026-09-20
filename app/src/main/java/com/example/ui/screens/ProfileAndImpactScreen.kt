@@ -90,6 +90,37 @@ fun ProfileAndImpactScreen(
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold
                                 )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (userProfile.role == "ASSOCIATION") AtharAmberSecondary.copy(alpha = 0.15f) else AtharTealPrimary.copy(alpha = 0.15f)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (userProfile.role == "ASSOCIATION") Icons.Default.Apartment else Icons.Default.VolunteerActivism,
+                                                contentDescription = null,
+                                                tint = if (userProfile.role == "ASSOCIATION") AtharAmberSecondary else AtharTealPrimary,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = userProfile.roleTitle,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (userProfile.role == "ASSOCIATION") AtharAmberSecondary else AtharTealPrimary
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = userProfile.badgeNumber,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 Text(
                                     text = userProfile.email,
                                     style = MaterialTheme.typography.bodySmall,
@@ -104,7 +135,7 @@ fun ProfileAndImpactScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "${userProfile.city} • ${userProfile.governorate}",
+                                        text = userProfile.wilaya,
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -145,7 +176,7 @@ fun ProfileAndImpactScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (userProfile.isGuest || !userProfile.isLoggedIn) "تسجيل الدخول إلى حسابك 🔑" else "تبديل الحساب / تسجيل الدخول بحساب آخر 🔄",
+                            text = if (userProfile.isGuest || !userProfile.isLoggedIn) "تسجيل الدخول إلى حسابك" else "تبديل الحساب / تسجيل الدخول بحساب آخر",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = AtharTealPrimary

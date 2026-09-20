@@ -39,11 +39,11 @@ fun AtharApp(navController: NavHostController = rememberNavController()) {
             if (isTopLevelDestination && currentRoute != Screen.Map.route) {
                 AtharTopAppBar(
                     title = when (currentRoute) {
-                        Screen.Appeals.route -> "النداءات والمبادرات 📢"
-                        Screen.Map.route -> "خريطة الأثر 🗺️"
-                        Screen.Notes.route -> "ملاحظاتي والدروس 📝"
-                        Screen.Leaderboard.route -> "لوحة الصدارة 🏆"
-                        Screen.Profile.route -> "حسابي وأثري 🌱"
+                        Screen.Appeals.route -> "النداءات والمبادرات"
+                        Screen.Map.route -> "خريطة الأثر"
+                        Screen.Notes.route -> "ملاحظاتي والدروس"
+                        Screen.Leaderboard.route -> "لوحة الصدارة"
+                        Screen.Profile.route -> "حسابي وأثري"
                         else -> "أثر | Athar"
                     },
                     unreadNotifCount = unreadCount,

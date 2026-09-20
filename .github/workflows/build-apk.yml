@@ -1,0 +1,63 @@
+name: Build Athar Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Create Mock Google Services & Key if missing
+        run: |
+          mkdir -p app/src/main
+          if [ ! -f "app/google-services.json" ]; then
+            echo '{"project_info":{"project_number":"123","project_id":"athar-dz"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:123","android_client_info":{"package_name":"com.aistudio.applet.bkvtip"}},"api_key":[{"current_key":"dummy"}]}]}' > app/google-services.json
+          fi
+          # Create debug keystore if needed
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
+
+      - name: Build Debug APK
+        run: |
+          gradle assembleDebug --stacktrace
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: athar-app-debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+      - name: Create GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Athar Android App v1.0.${{ github.run_number }}"
+          body: |
+            نسخة تطبيق أثر الميداني لنظام Android.
+            
+            - حفظ الحسابات والمزامنة المركزية مع قاعدة البيانات والسيرفر.
+            - واجهة خالية من الإيموجي وتعتمد على أيقونات Vector احترافية.
+            - دعم المتطوعين الميدانيين والجمعيات.
+          files: app/build/outputs/apk/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

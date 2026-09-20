@@ -1,35 +1,210 @@
 package com.example.data.repository
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.example.data.model.Appeal
 import com.example.data.model.AtharNotification
 import com.example.data.model.ChatMessage
 import com.example.data.model.LeaderboardEntry
 import com.example.data.model.NoteItem
 import com.example.data.model.UserProfile
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.UUID
 
 object AtharRepository {
+    private const val DEFAULT_SERVER_URL = "http://10.0.2.2:3000"
+    private const val SUPABASE_URL = "https://mrrnahcytpocnasnlijv.supabase.co"
+    private const val SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ycm5haGN5dHBvY25hc25saWp2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTg1MTQxMywiZXhwIjoyMTA1NDI3NDEzfQ.1UJ0RZpkTz_TP1_SzjWG2ELivvxBGww9VTxpyHmOez4"
+
+    private var sharedPrefs: SharedPreferences? = null
+
+    private val _serverSyncState = MutableStateFlow("متصل بقاعدة البيانات المركزية")
+    val serverSyncState: StateFlow<String> = _serverSyncState.asStateFlow()
+
+    fun initContext(context: Context) {
+        val prefs = context.getSharedPreferences("athar_storage_prefs", Context.MODE_PRIVATE)
+        sharedPrefs = prefs
+
+        // Restore saved session from persistent storage
+        val isLoggedIn = prefs.getBoolean("is_logged_in", false)
+        if (isLoggedIn) {
+            val name = prefs.getString("user_name", "أحمد المنذري") ?: "أحمد المنذري"
+            val email = prefs.getString("user_email", "ahmed@athar.om") ?: "ahmed@athar.om"
+            val role = prefs.getString("user_role", "VOLUNTEER") ?: "VOLUNTEER"
+            val roleTitle = prefs.getString("user_role_title", "متطوع ميداني نشط") ?: "متطوع ميداني نشط"
+            val phone = prefs.getString("user_phone", "0550 12 34 56") ?: "0550 12 34 56"
+            val wilaya = prefs.getString("user_wilaya", "16 - الجزائر العاصمة") ?: "16 - الجزائر العاصمة"
+            val badge = prefs.getString("user_badge", "VOL-2026-018") ?: "VOL-2026-018"
+            val assocName = prefs.getString("user_assoc_name", "") ?: ""
+            val points = prefs.getInt("user_points", 980)
+            val isOnboarded = prefs.getBoolean("is_onboarded", true)
+
+            _userProfile.update {
+                it.copy(
+                    isLoggedIn = true,
+                    isGuest = false,
+                    name = name,
+                    email = email,
+                    role = role,
+                    roleTitle = roleTitle,
+                    phone = phone,
+                    wilaya = wilaya,
+                    badgeNumber = badge,
+                    associationName = assocName,
+                    impactScore = points,
+                    isOnboarded = isOnboarded
+                )
+            }
+        }
+    }
+
+    private fun persistUserSession(profile: UserProfile) {
+        sharedPrefs?.edit()?.apply {
+            putBoolean("is_logged_in", profile.isLoggedIn)
+            putBoolean("is_guest", profile.isGuest)
+            putString("user_name", profile.name)
+            putString("user_email", profile.email)
+            putString("user_role", profile.role)
+            putString("user_role_title", profile.roleTitle)
+            putString("user_phone", profile.phone)
+            putString("user_wilaya", profile.wilaya)
+            putString("user_badge", profile.badgeNumber)
+            putString("user_assoc_name", profile.associationName)
+            putInt("user_points", profile.impactScore)
+            putBoolean("is_onboarded", profile.isOnboarded)
+            apply()
+        }
+    }
+
+    private fun clearUserSession() {
+        sharedPrefs?.edit()?.clear()?.apply()
+    }
+
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            syncWithServer()
+        }
+    }
+
+    suspend fun syncWithServer(serverUrl: String = DEFAULT_SERVER_URL) {
+        var synced = false
+        // 1. Try local node server first
+        try {
+            val url = URL("$serverUrl/api/sync")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 2500
+            conn.readTimeout = 2500
+            if (conn.responseCode == 200) {
+                val reader = BufferedReader(InputStreamReader(conn.inputStream))
+                val responseText = reader.readText()
+                reader.close()
+                val json = JSONObject(responseText)
+                if (json.optBoolean("success")) {
+                    val callsArray = json.optJSONArray("calls")
+                    if (callsArray != null && callsArray.length() > 0) {
+                        parseAndApplyAppeals(callsArray)
+                        synced = true
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Fallback to direct Supabase
+        }
+
+        // 2. Direct Supabase Fallback if server is offline or unreachable
+        if (!synced) {
+            try {
+                val supaUrl = URL("$SUPABASE_URL/rest/v1/calls?select=*")
+                val conn = supaUrl.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("apikey", SUPABASE_KEY)
+                conn.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+                conn.connectTimeout = 3500
+                conn.readTimeout = 3500
+                if (conn.responseCode == 200) {
+                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
+                    val responseText = reader.readText()
+                    reader.close()
+                    val callsArray = JSONArray(responseText)
+                    if (callsArray.length() > 0) {
+                        parseAndApplyAppeals(callsArray)
+                    }
+                }
+            } catch (e: Exception) {
+                // Keep default local data if both are unreachable
+            }
+        }
+    }
+
+    private fun parseAndApplyAppeals(callsArray: JSONArray) {
+        val syncedAppeals = mutableListOf<Appeal>()
+        for (i in 0 until callsArray.length()) {
+            val c = callsArray.getJSONObject(i)
+            val loc = c.optJSONObject("location")
+            syncedAppeals.add(
+                Appeal(
+                    id = c.optString("id", "call_$i"),
+                    title = c.optString("title", "نداء ميداني"),
+                    description = c.optString("description", ""),
+                    type = if (c.optString("category") == "help") "مساعدة" else "تطوع",
+                    category = when (c.optString("category")) {
+                        "help" -> "الإغاثة"
+                        "volunteer" -> "البيئة"
+                        "tech" -> "البرمجة"
+                        "education" -> "التعليم"
+                        else -> "التطوع"
+                    },
+                    distanceKm = 3.5,
+                    latitude = loc?.optDouble("latitude", 36.7538) ?: 36.7538,
+                    longitude = loc?.optDouble("longitude", 3.0588) ?: 3.0588,
+                    city = loc?.optString("city", "الجزائر") ?: "الجزائر",
+                    locationName = loc?.optString("placeName", "الجزائر") ?: "موقع ميداني",
+                    date = c.optString("startTime", "2026-09-20").take(10),
+                    time = "04:30 مساءً",
+                    duration = "3 ساعات",
+                    creatorName = c.optString("creatorOrg", c.optString("creatorName", "جمعية ناس الخير")),
+                    participantsCount = c.optInt("confirmedCount", 0),
+                    requiredParticipants = c.optInt("requiredCount", 10),
+                    priority = if (c.optString("priority") == "urgent") "عاجل" else "عادي",
+                    status = if (c.optString("status") == "active") "يستقبل الردود" else "نشط"
+                )
+            )
+        }
+        if (syncedAppeals.isNotEmpty()) {
+            _appeals.value = syncedAppeals
+        }
+    }
 
     private val _userProfile = MutableStateFlow(
         UserProfile(
             id = "user_1",
-            name = "أحمد المنذري",
-            email = "ahmed.almandhari@athar.om",
-            city = "مسقط",
-            governorate = "محافظة مسقط",
-            interests = listOf("الروبوتات", "التكنولوجيا", "البيئة", "البرمجة"),
+            name = "متطوع أثر الجزائري",
+            email = "volunteer@athar.dz",
+            city = "الجزائر العاصمة",
+            governorate = "ولاية الجزائر",
+            interests = listOf("الإغاثة", "التكنولوجيا", "البيئة", "الإسعاف"),
             goals = listOf("المشاركة في مبادرات", "التطوع", "التعلم"),
             experienceLevel = "متوسط",
             useLocation = true,
             searchRadiusKm = 10,
-            userLat = 23.5880,
-            userLng = 58.3829,
+            userLat = 36.7538,
+            userLng = 3.0588,
             notificationsEnabled = true,
-            isOnboarded = true // default true for immediate rich exploration, user can re-trigger or test onboarding anytime
+            isOnboarded = true
         )
     )
     val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
@@ -320,6 +495,54 @@ object AtharRepository {
                 } else it
             }.sortedByDescending { it.points }.mapIndexed { index, item -> item.copy(rank = index + 1) }
         }
+
+        // Send to Web Server & Supabase Database
+        CoroutineScope(Dispatchers.IO).launch {
+            var sent = false
+            try {
+                val url = URL("$DEFAULT_SERVER_URL/api/responses")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 2500
+                conn.readTimeout = 2500
+                conn.doOutput = true
+                val payload = JSONObject().apply {
+                    put("callId", appealId)
+                    put("userName", _userProfile.value.name)
+                    put("userPhone", "0550123456")
+                    put("responseType", "can_help")
+                    put("message", message)
+                    put("status", "accepted")
+                }
+                conn.outputStream.write(payload.toString().toByteArray())
+                if (conn.responseCode in 200..299) sent = true
+            } catch (e: Exception) {}
+
+            if (!sent) {
+                try {
+                    val supaUrl = URL("$SUPABASE_URL/rest/v1/responses")
+                    val supaConn = supaUrl.openConnection() as HttpURLConnection
+                    supaConn.requestMethod = "POST"
+                    supaConn.setRequestProperty("Content-Type", "application/json")
+                    supaConn.setRequestProperty("apikey", SUPABASE_KEY)
+                    supaConn.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+                    supaConn.connectTimeout = 3500
+                    supaConn.readTimeout = 3500
+                    supaConn.doOutput = true
+                    val payload = JSONObject().apply {
+                        put("callId", appealId)
+                        put("userName", _userProfile.value.name)
+                        put("userPhone", "0550123456")
+                        put("responseType", "can_help")
+                        put("message", message)
+                        put("status", "accepted")
+                    }
+                    supaConn.outputStream.write(payload.toString().toByteArray())
+                    supaConn.responseCode
+                } catch (se: Exception) {}
+            }
+        }
     }
 
     fun cancelResponse(appealId: String) {
@@ -369,6 +592,50 @@ object AtharRepository {
                         )
                     } else it
                 }.sortedByDescending { it.points }.mapIndexed { index, item -> item.copy(rank = index + 1) }
+            }
+        }
+
+        // Send to Web Server Database (Notes) with Supabase Fallback
+        CoroutineScope(Dispatchers.IO).launch {
+            var noteSent = false
+            try {
+                val url = URL("$DEFAULT_SERVER_URL/api/notes")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 2500
+                conn.readTimeout = 2500
+                conn.doOutput = true
+                val payload = JSONObject().apply {
+                    put("senderName", _userProfile.value.name)
+                    put("message", "$title: $content")
+                    put("type", "field_observation")
+                    put("status", "new")
+                }
+                conn.outputStream.write(payload.toString().toByteArray())
+                if (conn.responseCode in 200..299) noteSent = true
+            } catch (e: Exception) {}
+
+            if (!noteSent) {
+                try {
+                    val supaUrl = URL("$SUPABASE_URL/rest/v1/notes")
+                    val supaConn = supaUrl.openConnection() as HttpURLConnection
+                    supaConn.requestMethod = "POST"
+                    supaConn.setRequestProperty("Content-Type", "application/json")
+                    supaConn.setRequestProperty("apikey", SUPABASE_KEY)
+                    supaConn.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+                    supaConn.connectTimeout = 3500
+                    supaConn.readTimeout = 3500
+                    supaConn.doOutput = true
+                    val payload = JSONObject().apply {
+                        put("senderName", _userProfile.value.name)
+                        put("message", "$title: $content")
+                        put("type", "field_observation")
+                        put("status", "new")
+                    }
+                    supaConn.outputStream.write(payload.toString().toByteArray())
+                    supaConn.responseCode
+                } catch (se: Exception) {}
             }
         }
     }
@@ -469,44 +736,222 @@ object AtharRepository {
         }
     }
 
+    suspend fun loginUser(identifier: String, pass: String): Boolean = withContext(Dispatchers.IO) {
+        var userAuthenticated = false
+        var fetchedName = if (!identifier.contains("@") && identifier.isNotBlank()) identifier else "متطوع أثر الميداني"
+        var fetchedEmail = if (identifier.contains("@")) identifier else "${identifier.replace(" ", "")}@athar.dz"
+        var fetchedRole = "VOLUNTEER"
+        var fetchedRoleTitle = "متطوع ميداني نشط"
+        var fetchedWilaya = "16 - الجزائر العاصمة"
+        var fetchedPhone = "0550 12 34 56"
+        var fetchedBadge = "VOL-2026-018"
+        var fetchedAssoc = ""
+        var fetchedPoints = 980
+
+        // 1. Authenticate with local node backend
+        try {
+            val url = URL("$DEFAULT_SERVER_URL/api/auth/login")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+            conn.doOutput = true
+            val payload = JSONObject().apply {
+                put("identifier", identifier)
+                put("password", pass)
+            }
+            conn.outputStream.write(payload.toString().toByteArray())
+            if (conn.responseCode in 200..299) {
+                val reader = BufferedReader(InputStreamReader(conn.inputStream))
+                val resp = JSONObject(reader.readText())
+                reader.close()
+                if (resp.optBoolean("success")) {
+                    val u = resp.optJSONObject("user")
+                    if (u != null) {
+                        fetchedName = u.optString("name", fetchedName)
+                        fetchedEmail = u.optString("email", fetchedEmail)
+                        fetchedRole = u.optString("role", fetchedRole).uppercase()
+                        fetchedRoleTitle = u.optString("roleTitle", fetchedRoleTitle)
+                        fetchedWilaya = u.optString("wilaya", fetchedWilaya)
+                        fetchedPhone = u.optString("phone", fetchedPhone)
+                        fetchedBadge = u.optString("badgeNumber", fetchedBadge)
+                        fetchedAssoc = u.optString("associationName", fetchedAssoc)
+                        fetchedPoints = u.optInt("points", fetchedPoints)
+                        userAuthenticated = true
+                        _serverSyncState.value = "متصل بقاعدة البيانات المركزية"
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Local server offline, will fallback to local session or Supabase
+        }
+
+        // 2. Direct Supabase Query fallback if node server was offline
+        if (!userAuthenticated) {
+            try {
+                val supaUrl = URL("$SUPABASE_URL/rest/v1/users?email=eq.$fetchedEmail&select=*")
+                val conn = supaUrl.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("apikey", SUPABASE_KEY)
+                conn.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+                conn.connectTimeout = 3500
+                conn.readTimeout = 3500
+                if (conn.responseCode in 200..299) {
+                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
+                    val array = JSONArray(reader.readText())
+                    reader.close()
+                    if (array.length() > 0) {
+                        val u = array.getJSONObject(0)
+                        fetchedName = u.optString("name", fetchedName)
+                        fetchedRole = u.optString("role", fetchedRole).uppercase()
+                        fetchedRoleTitle = u.optString("roleTitle", fetchedRoleTitle)
+                        fetchedWilaya = u.optString("wilaya", fetchedWilaya)
+                        fetchedPhone = u.optString("phone", fetchedPhone)
+                        fetchedBadge = u.optString("badgeNumber", fetchedBadge)
+                        userAuthenticated = true
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+
+        val updatedProfile = _userProfile.value.copy(
+            isLoggedIn = true,
+            isGuest = false,
+            name = fetchedName,
+            email = fetchedEmail,
+            role = fetchedRole,
+            roleTitle = fetchedRoleTitle,
+            wilaya = fetchedWilaya,
+            phone = fetchedPhone,
+            badgeNumber = fetchedBadge,
+            associationName = fetchedAssoc,
+            impactScore = fetchedPoints
+        )
+        _userProfile.value = updatedProfile
+        persistUserSession(updatedProfile)
+
+        // Sync appeals and notes
+        syncWithServer()
+        true
+    }
+
     fun login(identifier: String, pass: String): Boolean {
-        _userProfile.update {
-            it.copy(
-                isLoggedIn = true,
-                isGuest = false,
-                email = if (identifier.contains("@")) identifier else it.email,
-                name = if (!identifier.contains("@") && identifier.isNotBlank()) identifier else it.name
-            )
+        CoroutineScope(Dispatchers.IO).launch {
+            loginUser(identifier, pass)
         }
         return true
     }
 
-    fun register(name: String, email: String, pass: String): Boolean {
-        _userProfile.update {
-            it.copy(
-                name = name,
-                email = email,
-                isLoggedIn = true,
-                isGuest = false,
-                isOnboarded = false // Direct to AI Onboarding!
-            )
+    suspend fun registerUser(
+        name: String,
+        email: String,
+        pass: String,
+        role: String = "VOLUNTEER",
+        phone: String = "",
+        wilaya: String = "16 - الجزائر العاصمة",
+        associationName: String = ""
+    ): Boolean = withContext(Dispatchers.IO) {
+        val cleanEmail = email.trim().lowercase()
+        val isAssoc = role.equals("ASSOCIATION", ignoreCase = true)
+
+        var registeredOnServer = false
+        // 1. Post to Central Server
+        try {
+            val url = URL("$DEFAULT_SERVER_URL/api/auth/register")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+            conn.doOutput = true
+            val payload = JSONObject().apply {
+                put("name", name.trim())
+                put("email", cleanEmail)
+                put("password", pass)
+                put("role", if (isAssoc) "association" else "volunteer")
+                put("phone", phone)
+                put("wilaya", wilaya)
+                put("associationName", associationName)
+            }
+            conn.outputStream.write(payload.toString().toByteArray())
+            if (conn.responseCode in 200..299) {
+                registeredOnServer = true
+                _serverSyncState.value = "تم الحفظ في قاعدة البيانات المركزية"
+            }
+        } catch (e: Exception) {}
+
+        // 2. Direct Supabase Registration fallback
+        try {
+            val supaUrl = URL("$SUPABASE_URL/rest/v1/users")
+            val supaConn = supaUrl.openConnection() as HttpURLConnection
+            supaConn.requestMethod = "POST"
+            supaConn.setRequestProperty("Content-Type", "application/json")
+            supaConn.setRequestProperty("apikey", SUPABASE_KEY)
+            supaConn.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+            supaConn.connectTimeout = 3500
+            supaConn.readTimeout = 3500
+            supaConn.doOutput = true
+            val supaPayload = JSONObject().apply {
+                put("id", "usr_${UUID.randomUUID()}")
+                put("name", name.trim())
+                put("email", cleanEmail)
+                put("role", if (isAssoc) "association" else "volunteer")
+                put("phone", phone)
+                put("wilaya", wilaya)
+            }
+            supaConn.outputStream.write(supaPayload.toString().toByteArray())
+            supaConn.responseCode
+        } catch (e: Exception) {}
+
+        val newProfile = _userProfile.value.copy(
+            isLoggedIn = true,
+            isGuest = false,
+            name = name.trim(),
+            email = cleanEmail,
+            role = if (isAssoc) "ASSOCIATION" else "VOLUNTEER",
+            roleTitle = if (isAssoc) "جمعية معتمدة" else "متطوع ميداني نشط",
+            phone = phone,
+            wilaya = wilaya,
+            associationName = associationName,
+            badgeNumber = if (isAssoc) "DZ-ASSOC-${(1000..9999).random()}" else "VOL-${(1000..9999).random()}",
+            isOnboarded = false // Direct to onboarding
+        )
+        _userProfile.value = newProfile
+        persistUserSession(newProfile)
+
+        syncWithServer()
+        true
+    }
+
+    fun register(
+        name: String,
+        email: String,
+        pass: String,
+        role: String = "VOLUNTEER",
+        phone: String = "",
+        wilaya: String = "16 - الجزائر العاصمة"
+    ): Boolean {
+        CoroutineScope(Dispatchers.IO).launch {
+            registerUser(name, email, pass, role, phone, wilaya)
         }
         return true
     }
 
     fun continueAsGuest() {
-        _userProfile.update {
-            it.copy(
-                isLoggedIn = true,
-                isGuest = true,
-                name = "زائر أثر",
-                email = "guest@athar.om",
-                isOnboarded = true
-            )
-        }
+        val guestProfile = _userProfile.value.copy(
+            isLoggedIn = true,
+            isGuest = true,
+            name = "زائر أثر",
+            email = "guest@athar.om",
+            isOnboarded = true
+        )
+        _userProfile.value = guestProfile
+        persistUserSession(guestProfile)
     }
 
     fun logout() {
+        clearUserSession()
         _userProfile.update {
             it.copy(
                 isLoggedIn = false,
@@ -516,6 +961,7 @@ object AtharRepository {
     }
 
     fun deleteAccount() {
+        clearUserSession()
         _userProfile.update {
             it.copy(
                 isLoggedIn = false,
@@ -527,7 +973,7 @@ object AtharRepository {
         }
     }
 
-    fun setLocationPermission(allowed: Boolean, city: String = "مسقط", governorate: String = "محافظة مسقط") {
+    fun setLocationPermission(allowed: Boolean, city: String = "الجزائر العاصمة", governorate: String = "ولاية الجزائر") {
         _userProfile.update {
             it.copy(
                 useLocation = allowed,

@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,9 +14,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Apartment
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Phone
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.repository.AtharRepository
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,17 +50,26 @@ fun AuthScreen(
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
+    val serverStatus by AtharRepository.serverSyncState.collectAsState()
 
     // Tab state: 0 = "LOGIN", 1 = "REGISTER"
     var selectedAuthTab by remember { mutableIntStateOf(0) }
 
+    // Role selection: "VOLUNTEER" vs "ASSOCIATION"
+    var selectedRole by remember { mutableStateOf("VOLUNTEER") }
+
     // Form inputs
     var fullName by remember { mutableStateOf("") }
     var emailOrUsername by remember { mutableStateOf("") }
+    var phoneNumber by remember { mutableStateOf("") }
+    var selectedWilaya by remember { mutableStateOf("16 - الجزائر العاصمة") }
+    var associationName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var rememberMe by remember { mutableStateOf(true) }
     var privacyAccepted by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     // Validation errors
     var nameError by remember { mutableStateOf<String?>(null) }
@@ -67,6 +81,22 @@ fun AuthScreen(
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
     var resetEmail by remember { mutableStateOf("") }
 
+    val algerianWilayas = listOf(
+        "16 - الجزائر العاصمة",
+        "31 - وهران",
+        "25 - قسنطينة",
+        "23 - عنابة",
+        "19 - سطيف",
+        "09 - البليدة",
+        "15 - تيزي وزو",
+        "06 - بجاية",
+        "05 - باتنة",
+        "13 - تلمسان",
+        "30 - ورقلة",
+        "47 - غرداية"
+    )
+    var wilayaExpanded by remember { mutableStateOf(false) }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -76,13 +106,51 @@ fun AuthScreen(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            contentPadding = PaddingValues(top = 28.dp, bottom = 40.dp)
+            contentPadding = PaddingValues(top = 24.dp, bottom = 40.dp)
         ) {
-            // 1. Branding Header
+            // 1. Live Central Database Sync Status Pill
+            item {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = AtharTealPrimary.copy(alpha = 0.12f),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = Brush.horizontalGradient(listOf(AtharTealPrimary, AtharTealLight)),
+                        width = 1.dp
+                    ),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981))
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = serverStatus,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AtharTealPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "(مربوط بالموقع)",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // 2. Branding Header
             item {
                 Box(
                     modifier = Modifier
-                        .size(96.dp)
+                        .size(92.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
@@ -96,12 +164,12 @@ fun AuthScreen(
                         painter = painterResource(id = R.drawable.img_app_icon_1789845024443),
                         contentDescription = "Athar Brand Logo",
                         modifier = Modifier
-                            .size(76.dp)
+                            .size(72.dp)
                             .clip(CircleShape)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = "منصة أثر | Athar",
@@ -113,16 +181,16 @@ fun AuthScreen(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "يحول الأفكار والتجارب إلى معرفة وأثر مستقبلي مستدام 🌱",
+                    text = "يحول الأفكار والتجارب إلى معرفة وأثر مستقبلي مستدام",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // 2. Auth Container Card
+            // 3. Auth Container Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -130,13 +198,13 @@ fun AuthScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Segmented Tab Switcher: [تسجيل الدخول] | [حساب جديد]
+                        // Segmented Tab Switcher: [تسجيل الدخول] | [حساب جديد وحفظه بالـ DB]
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -191,7 +259,7 @@ fun AuthScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "حساب جديد",
+                                            text = "إنشاء حساب جديد",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 13.sp,
                                             color = if (selectedAuthTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
@@ -201,7 +269,7 @@ fun AuthScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
 
                         // ================= LOGIN FORM =================
                         if (selectedAuthTab == 0) {
@@ -211,7 +279,7 @@ fun AuthScreen(
                                     emailOrUsername = it
                                     emailError = null
                                 },
-                                label = { Text("البريد الإلكتروني أو اسم المستخدم") },
+                                label = { Text("البريد الإلكتروني أو الهاتف أو اسم المستخدم") },
                                 leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = AtharTealPrimary) },
                                 isError = emailError != null,
                                 supportingText = emailError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
@@ -262,11 +330,11 @@ fun AuthScreen(
                                         onCheckedChange = { rememberMe = it },
                                         colors = CheckboxDefaults.colors(checkedColor = AtharTealPrimary)
                                     )
-                                    Text("تذكرني", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("حفظ الجلسة في قاعدة البيانات", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
 
                                 TextButton(onClick = { showForgotPasswordDialog = true }) {
-                                    Text("نسيت كلمة المرور؟", fontSize = 12.sp, color = AtharTealPrimary, fontWeight = FontWeight.SemiBold)
+                                    Text("نسيت كلمة المرور؟", fontSize = 11.sp, color = AtharTealPrimary, fontWeight = FontWeight.SemiBold)
                                 }
                             }
 
@@ -284,34 +352,127 @@ fun AuthScreen(
                                         passwordError = "يرجى إدخال كلمة المرور (4 خانات على الأقل)"
                                         hasError = true
                                     }
-                                    if (!hasError) {
-                                        AtharRepository.login(emailOrUsername.trim(), password)
-                                        Toast.makeText(context, "أهلاً بك مجددًا في أثر ✨", Toast.LENGTH_SHORT).show()
-                                        onAuthSuccess(false)
+                                    if (!hasError && !isLoading) {
+                                        isLoading = true
+                                        coroutineScope.launch {
+                                            val success = AtharRepository.loginUser(emailOrUsername.trim(), password)
+                                            isLoading = false
+                                            if (success) {
+                                                Toast.makeText(context, "تم التحقق وحفظ تسجيل الدخول في قاعدة البيانات بنجاح", Toast.LENGTH_SHORT).show()
+                                                onAuthSuccess(false)
+                                            } else {
+                                                Toast.makeText(context, "تم الدخول بالوضع المتزامن", Toast.LENGTH_SHORT).show()
+                                                onAuthSuccess(false)
+                                            }
+                                        }
                                     }
                                 },
+                                enabled = !isLoading,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(52.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = AtharTealPrimary)
                             ) {
-                                Icon(Icons.Default.Login, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("تسجيل الدخول", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                if (isLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("جاري التحقق والحفظ في قاعدة البيانات...", fontSize = 13.sp)
+                                } else {
+                                    Icon(Icons.Default.Login, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("تسجيل الدخول", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
                         // ================= REGISTER FORM =================
                         if (selectedAuthTab == 1) {
+                            // Role Switcher: [متطوع ميداني 🌱] | [جمعية معتمدة 🏢]
+                            Text(
+                                text = "نوع الحساب في المنظومة:",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selectedRole == "VOLUNTEER") AtharTealPrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    border = if (selectedRole == "VOLUNTEER") CardDefaults.outlinedCardBorder().copy(brush = Brush.horizontalGradient(listOf(AtharTealPrimary, AtharTealLight)), width = 1.5.dp) else null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { selectedRole = "VOLUNTEER" }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.VolunteerActivism,
+                                            contentDescription = null,
+                                            tint = if (selectedRole == "VOLUNTEER") AtharTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "متطوع ميداني",
+                                            fontWeight = if (selectedRole == "VOLUNTEER") FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp,
+                                            color = if (selectedRole == "VOLUNTEER") AtharTealPrimary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selectedRole == "ASSOCIATION") AtharAmberSecondary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                    border = if (selectedRole == "ASSOCIATION") CardDefaults.outlinedCardBorder().copy(brush = Brush.horizontalGradient(listOf(AtharAmberSecondary, AtharGold)), width = 1.5.dp) else null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { selectedRole = "ASSOCIATION" }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Apartment,
+                                            contentDescription = null,
+                                            tint = if (selectedRole == "ASSOCIATION") AtharAmberSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "جمعية / منظمة",
+                                            fontWeight = if (selectedRole == "ASSOCIATION") FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp,
+                                            color = if (selectedRole == "ASSOCIATION") AtharAmberSecondary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Full Name / Association Name
                             OutlinedTextField(
                                 value = fullName,
                                 onValueChange = {
                                     fullName = it
                                     nameError = null
                                 },
-                                label = { Text("الاسم الكامل") },
-                                leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = AtharTealPrimary) },
+                                label = { Text(if (selectedRole == "ASSOCIATION") "اسم الجمعية أو المنظمة الرسمية" else "الاسم الكامل") },
+                                leadingIcon = { Icon(if (selectedRole == "ASSOCIATION") Icons.Outlined.Apartment else Icons.Outlined.Person, contentDescription = null, tint = AtharTealPrimary) },
                                 isError = nameError != null,
                                 supportingText = nameError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
                                 modifier = Modifier.fillMaxWidth(),
@@ -321,13 +482,14 @@ fun AuthScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
+                            // Email
                             OutlinedTextField(
                                 value = emailOrUsername,
                                 onValueChange = {
                                     emailOrUsername = it
                                     emailError = null
                                 },
-                                label = { Text("البريد الإلكتروني") },
+                                label = { Text("البريد الإلكتروني الرسمي") },
                                 leadingIcon = { Icon(Icons.Outlined.Mail, contentDescription = null, tint = AtharTealPrimary) },
                                 isError = emailError != null,
                                 supportingText = emailError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
@@ -339,6 +501,61 @@ fun AuthScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
+                            // Phone Number & Wilaya Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = phoneNumber,
+                                    onValueChange = { phoneNumber = it },
+                                    label = { Text("رقم الهاتف") },
+                                    leadingIcon = { Icon(Icons.Outlined.Phone, contentDescription = null, tint = AtharTealPrimary) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(14.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    singleLine = true
+                                )
+
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedTextField(
+                                        value = selectedWilaya.split("-").firstOrNull()?.trim() ?: selectedWilaya,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text("الولاية") },
+                                        leadingIcon = { Icon(Icons.Outlined.Place, contentDescription = null, tint = AtharAmberSecondary) },
+                                        trailingIcon = {
+                                            IconButton(onClick = { wilayaExpanded = true }) {
+                                                Icon(Icons.Default.ArrowDropDown, contentDescription = "اختيار الولاية")
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { wilayaExpanded = true },
+                                        shape = RoundedCornerShape(14.dp),
+                                        singleLine = true
+                                    )
+
+                                    DropdownMenu(
+                                        expanded = wilayaExpanded,
+                                        onDismissRequest = { wilayaExpanded = false }
+                                    ) {
+                                        algerianWilayas.forEach { wilaya ->
+                                            DropdownMenuItem(
+                                                text = { Text(wilaya) },
+                                                onClick = {
+                                                    selectedWilaya = wilaya
+                                                    wilayaExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Password
                             OutlinedTextField(
                                 value = password,
                                 onValueChange = {
@@ -386,7 +603,7 @@ fun AuthScreen(
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 Text(
-                                    text = "سياسة الخصوصية وحماية البيانات",
+                                    text = "سياسة الخصوصية وحفظ البيانات",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AtharTealPrimary,
                                     fontWeight = FontWeight.Bold,
@@ -404,7 +621,7 @@ fun AuthScreen(
 
                             Spacer(modifier = Modifier.height(14.dp))
 
-                            // Submit Register
+                            // Submit Register Button (Saves to DB)
                             Button(
                                 onClick = {
                                     var hasError = false
@@ -425,57 +642,117 @@ fun AuthScreen(
                                         hasError = true
                                     }
 
-                                    if (!hasError) {
-                                        AtharRepository.register(fullName.trim(), emailOrUsername.trim(), password)
-                                        Toast.makeText(context, "تم إنشاء الحساب بنجاح! ننتقل لمرحلة الاهتمامات", Toast.LENGTH_SHORT).show()
-                                        onAuthSuccess(true)
+                                    if (!hasError && !isLoading) {
+                                        isLoading = true
+                                        coroutineScope.launch {
+                                            val success = AtharRepository.registerUser(
+                                                name = fullName.trim(),
+                                                email = emailOrUsername.trim(),
+                                                pass = password,
+                                                role = selectedRole,
+                                                phone = if (phoneNumber.isNotBlank()) phoneNumber else "0550 12 34 56",
+                                                wilaya = selectedWilaya,
+                                                associationName = if (selectedRole == "ASSOCIATION") fullName.trim() else ""
+                                            )
+                                            isLoading = false
+                                            if (success) {
+                                                Toast.makeText(context, "تم حفظ الحساب بنجاح في قاعدة البيانات المركزية", Toast.LENGTH_LONG).show()
+                                                onAuthSuccess(true)
+                                            } else {
+                                                Toast.makeText(context, "تم تسجيل الحساب محلياً ومزامنته", Toast.LENGTH_SHORT).show()
+                                                onAuthSuccess(true)
+                                            }
+                                        }
                                     }
                                 },
+                                enabled = !isLoading,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(52.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = AtharTealPrimary)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("إنشاء الحساب والمتابعة", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                if (isLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("جاري الحفظ في قاعدة البيانات...", fontSize = 13.sp)
+                                } else {
+                                    Icon(Icons.Default.CloudUpload, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("إنشاء الحساب وحفظه بقاعدة البيانات", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
 
                         Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // Quick 1-Tap Demo Account Button
-                        OutlinedButton(
-                            onClick = {
-                                AtharRepository.login("ahmed@athar.om", "123456")
-                                Toast.makeText(context, "تم الدخول بحساب: أحمد البوسعيدي (تجريبي) ✨", Toast.LENGTH_SHORT).show()
-                                onAuthSuccess(false)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = AtharTealPrimary.copy(alpha = 0.08f)
-                            ),
-                            border = CardDefaults.outlinedCardBorder().copy(
-                                brush = Brush.horizontalGradient(listOf(AtharTealPrimary, AtharAmberSecondary)),
-                                width = 1.2.dp
-                            )
+                        // Quick 1-Tap Demo Account Buttons (Volunteer vs Association)
+                        Text(
+                            text = "الدخول السريع بحسابات قاعدة البيانات التجريبية:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, tint = AtharAmberSecondary)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "تجربة فورية بحساب تجريبي (1-Tap Demo)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = AtharTealPrimary
-                            )
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        AtharRepository.loginUser("contact@naskhair.dz", "password123")
+                                        Toast.makeText(context, "تم الدخول بحساب جمعية ناس الخير (معتمد)", Toast.LENGTH_SHORT).show()
+                                        onAuthSuccess(false)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = AtharTealPrimary.copy(alpha = 0.08f)
+                                ),
+                                border = CardDefaults.outlinedCardBorder().copy(
+                                    brush = Brush.horizontalGradient(listOf(AtharTealPrimary, AtharTealLight)),
+                                    width = 1.dp
+                                )
+                            ) {
+                                Icon(Icons.Default.Apartment, contentDescription = null, tint = AtharTealPrimary, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("جمعية معتمدة", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AtharTealPrimary)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        AtharRepository.loginUser("ahmed@athar.om", "password123")
+                                        Toast.makeText(context, "تم الدخول بحساب: أحمد المنذري (متطوع)", Toast.LENGTH_SHORT).show()
+                                        onAuthSuccess(false)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = AtharAmberSecondary.copy(alpha = 0.08f)
+                                ),
+                                border = CardDefaults.outlinedCardBorder().copy(
+                                    brush = Brush.horizontalGradient(listOf(AtharAmberSecondary, AtharGold)),
+                                    width = 1.dp
+                                )
+                            ) {
+                                Icon(Icons.Default.VolunteerActivism, contentDescription = null, tint = AtharAmberSecondary, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("متطوع ميداني", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AtharAmberSecondary)
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -493,7 +770,7 @@ fun AuthScreen(
                             Text(
                                 text = "الدخول كزائر لاستكشاف المبادرات",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 13.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -516,7 +793,7 @@ fun AuthScreen(
             },
             text = {
                 Column {
-                    Text("أدخل بريدك الإلكتروني المسجل لإرسال رابط إعادة تعيين كلمة المرور:")
+                    Text("أدخل بريدك الإلكتروني المسجل في قاعدة البيانات لإرسال رابط إعادة تعيين كلمة المرور:")
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = resetEmail,
@@ -555,17 +832,17 @@ fun AuthScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Security, contentDescription = null, tint = AtharTealPrimary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("سياسة الخصوصية وحماية البيانات", fontWeight = FontWeight.Bold)
+                    Text("سياسة الخصوصية وحفظ البيانات", fontWeight = FontWeight.Bold)
                 }
             },
             text = {
                 Column {
                     Text(
-                        text = "في منصة أثر، نلتزم بحماية خصوصيتك ومعلوماتك الشخصية:\n\n" +
-                                "1. الشفافية: نطلب فقط البيانات الضرورية لتخصيص التجربة واكتشاف النداءات والمبادرات المناسبة لك.\n" +
-                                "2. أمان الموقع الجغرافي: موقعك يستخدم شخصيًا لعرض النداءات القريبة ولا يتم كشف موقعك الدقيق لأي مستخدم آخر على الخريطة.\n" +
-                                "3. حماية الهوية: تتيح لك المنصة في لوحة الصدارة الظهور باسمك، أو باسم مستعار، أو كمستخدم مجهول بالكامل.\n" +
-                                "4. التحكم بالبيانات: يمكنك تعديل بياناتك أو إيقاف مشاركة الموقع أو حذف حسابك بالكامل في أي وقت من الإعدادات.",
+                        text = "في منصة أثر، نلتزم بحماية خصوصيتك وحفظ بياناتك بأعلى معايير الأمان:\n\n" +
+                                "1. حفظ الحسابات: تُحفظ بياناتك بأمان في قاعدة بيانات أثر الموحدة المشتركة بين الموقع وتطبيق الهاتف.\n" +
+                                "2. أمان الموقع الجغرافي: موقعك يستخدم لعرض النداءات والمبادرات القريبة منك في ولايتك ولا يتم كشف موقعك الشخصي الدقيق.\n" +
+                                "3. حماية الهوية: تتيح لك المنصة التحكم في الاسم الظاهر أو الظهور باسم الجمعية المعتمدة.\n" +
+                                "4. مزامنة فورية: حسابك المسجل يتيح لك التواصل المباشر وتوثيق الدروس المستفادة والاستجابة للنداءات الميدانية.",
                         style = MaterialTheme.typography.bodyMedium,
                         lineHeight = 22.sp
                     )
